@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  tag: staging
+  tag: "8dd2c6d14286d85b8533867e91c9af4dfb22e2a2"
 
 env:
   APP_VERSION: "staging"
