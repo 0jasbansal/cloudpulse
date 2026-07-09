@@ -1,0 +1,4 @@
+# Copy this file to terraform.tfvars and fill in your real token
+# NEVER commit terraform.tfvars to Git - add it to .gitignore
+
+do_token = "your-digitalocean-api-token-here"

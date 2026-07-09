@@ -1,0 +1,11 @@
+replicaCount: 3
+
+image:
+  tag: latest
+
+env:
+  APP_VERSION: "production"
+
+ingress:
+  enabled: true
+  host: cloudpulse.local

@@ -1,0 +1,11 @@
+replicaCount: 1
+
+image:
+  tag: staging
+
+env:
+  APP_VERSION: "staging"
+
+ingress:
+  enabled: true
+  host: staging.cloudpulse.local

@@ -1,0 +1,40 @@
+replicaCount: 2
+
+image:
+  repository: YOUR_DOCKERHUB_USERNAME/cloudpulse-api
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+# Kubernetes uses these to decide pod health.
+# If livenessProbe fails repeatedly -> pod gets restarted.
+# If readinessProbe fails -> pod is pulled out of the service's load balancer
+# until it's healthy again. This is the "self-healing" piece.
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+env:
+  APP_VERSION: "0.1.0"
+
+ingress:
+  enabled: false
+  host: cloudpulse.local
