@@ -1,7 +1,7 @@
 replicaCount: 3
 
 image:
-  tag: "88e452be701391120350394fbab7b648a2a7502b"
+  tag: "0ad640519c6be931ccb17f205228bc53036ff633"
 
 env:
   APP_VERSION: "production"
