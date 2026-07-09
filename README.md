@@ -1,171 +1,126 @@
-# CloudPulse — Kubernetes GitOps Deployment Platform
+# CloudPulse
 
-A FastAPI microservice deployed through a full GitOps pipeline: GitHub Actions
-builds and tests the code, Helm packages it for Kubernetes, and ArgoCD
-automatically syncs staging/production environments to match what's in Git —
-with health-check-based self-healing.
+CloudPulse is a containerized FastAPI microservice deployed on Kubernetes using a GitOps model with ArgoCD, featuring automated CI/CD via GitHub Actions and Infrastructure as Code (IaC) via Terraform.
 
-## Architecture
+## System Architecture
 
 ```
-Push to GitHub
-      |
-      v
-GitHub Actions (test -> build image -> push to Docker Hub -> update Helm values in Git)
-      |
-      v
-ArgoCD (watches Git repo, detects the values.yaml change)
-      |
-      v
-Kubernetes cluster (auto-syncs staging/production namespaces)
-      |
-      v
-Prometheus + Grafana (monitors health, liveness/readiness probes auto-restart bad pods)
+                                  [ GitHub Repo ]
+                                   /           \
+                     (Trigger CI) /             \ (Sync Cluster Manifests)
+                                 v               v
+                        [GitHub Actions]     [ArgoCD]
+                         /            \          |
+             (Push)     /              \         | (Deploy / Sync)
+                       v                v        v
+                [Docker Hub]      [Git Repo Config] ----> [Kubernetes Cluster]
+                                                                 |
+                                                          (Scrapes Telemetry)
+                                                                 v
+                                                         [Prometheus + Grafana]
 ```
 
-## Prerequisites (install these first)
+## Tech Stack
+* **Runtime**: FastAPI, Uvicorn, Python 3.12
+* **Containerization**: Docker, Docker Compose
+* **Orchestration**: Kubernetes, Helm v3
+* **GitOps**: ArgoCD
+* **CI/CD**: GitHub Actions
+* **IaC**: Terraform (AWS EKS & DigitalOcean)
+* **Observability**: Prometheus, Grafana
 
-- Docker Desktop: https://docs.docker.com/get-docker/
-- kubectl: https://kubernetes.io/docs/tasks/tools/
-- Minikube: https://minikube.sigs.k8s.io/docs/start/
-- Helm: https://helm.sh/docs/intro/install/
-- A Docker Hub account (free): https://hub.docker.com/
-- A DigitalOcean account if you want the Terraform part live (has a free trial credit)
+---
 
-## Step 1 — Run it locally first (no Kubernetes yet)
+## Getting Started
 
-Get the basics working before adding cluster complexity.
+### 1. Local Development (Docker Compose)
+To spin up the application along with local Prometheus and Grafana instances for testing:
 
 ```bash
-cd cloudpulse
 docker compose up --build
 ```
 
-Visit:
-- http://localhost:8000/docs — FastAPI's auto-generated API docs
-- http://localhost:8000/health — health check
-- http://localhost:9090 — Prometheus
-- http://localhost:3000 — Grafana (login: admin / admin)
+Access endpoints:
+* **API Documentation**: http://localhost:8000/docs
+* **Health Check**: http://localhost:8000/health
+* **Prometheus Server**: http://localhost:9090
+* **Grafana Dashboards**: http://localhost:3000 (Credentials: admin / admin)
 
-Run the tests locally too, so you understand what the CI pipeline is doing:
-
+Run tests locally:
 ```bash
-cd app
-pip install -r requirements.txt
-pytest -v
+pip install -r app/requirements.txt
+pytest -v app/
 ```
 
-## Step 2 — Start Minikube and deploy with Helm
+### 2. Local Kubernetes Deployment (Minikube & Helm)
+Start a local Kubernetes cluster and enable the Ingress controller:
 
 ```bash
 minikube start
 minikube addons enable ingress
+```
 
-# Build the image directly into Minikube's Docker so you don't need a registry yet
+Point your shell to Minikube's Docker daemon and build the image locally:
+```bash
 eval $(minikube docker-env)
-docker build -t YOUR_DOCKERHUB_USERNAME/cloudpulse-api:latest ./app
+docker build -t ojasbansal/cloudpulse-api:latest ./app
+```
 
-# Install using Helm
+Deploy the application using the Helm chart:
+```bash
 helm install cloudpulse ./helm-chart/cloudpulse
-
-# Check it's running
-kubectl get pods
-kubectl get svc
 ```
 
-To see it self-heal: kill a pod manually and watch Kubernetes bring it back.
-
+Verify the deployment:
 ```bash
 kubectl get pods
-kubectl delete pod <pod-name>
-kubectl get pods -w   # watch a new one get created automatically
+kubectl get service cloudpulse-cloudpulse
 ```
 
-## Step 3 — Push image to Docker Hub (needed for CI/CD to work)
+---
+
+## Production Deployments & GitOps
+
+### CI/CD Pipeline Flow
+The project uses GitHub Actions (.github/workflows/ci-cd.yml) to orchestrate builds:
+1. **Lint & Test**: Runs code compliance checks and unit tests.
+2. **Build & Publish**: Builds an optimized, multi-stage Docker image and pushes it to Docker Hub (ojasbansal/cloudpulse-api).
+3. **GitOps Trigger**: Modifies values-staging.yaml or values-production.yaml with the new image SHA and commits it back to Git with a [skip ci] tag.
+
+### ArgoCD GitOps Configuration
+To deploy ArgoCD and sync the repository manifests:
 
 ```bash
-docker login
-docker tag YOUR_DOCKERHUB_USERNAME/cloudpulse-api:latest YOUR_DOCKERHUB_USERNAME/cloudpulse-api:latest
-docker push YOUR_DOCKERHUB_USERNAME/cloudpulse-api:latest
-```
-
-## Step 4 — Set up GitHub Actions CI/CD
-
-1. Push this whole project to a new GitHub repo.
-2. In your repo settings, go to Settings -> Secrets and variables -> Actions, and add:
-   - `DOCKERHUB_USERNAME`
-   - `DOCKERHUB_TOKEN` (create one at hub.docker.com -> Account Settings -> Security)
-3. Replace `YOUR_DOCKERHUB_USERNAME` in `.github/workflows/ci-cd.yml`, `helm-chart/cloudpulse/values.yaml`,
-   and the ArgoCD manifests with your actual Docker Hub username.
-4. Create a `develop` branch for staging deploys, keep `main` for production:
-   ```bash
-   git checkout -b develop
-   git push -u origin develop
-   ```
-5. Push a small code change and watch the Actions tab run: test -> build -> push image -> update Helm values.
-
-## Step 5 — Install ArgoCD and connect it to your repo
-
-```bash
+# Install ArgoCD inside cluster
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-# Access the ArgoCD UI
+# Access ArgoCD Web Console
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
 
-Get the initial admin password:
+Extract the default admin password:
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 ```
 
-Visit https://localhost:8080, log in with `admin` and that password.
-
-Apply your Application manifests so ArgoCD starts watching your repo:
+Sync the cluster state with Git:
 ```bash
 kubectl apply -f argocd/staging-app.yaml
 kubectl apply -f argocd/production-app.yaml
 ```
 
-Now, whenever GitHub Actions updates the image tag in `values-staging.yaml` or
-`values-production.yaml`, ArgoCD detects the Git change and automatically
-re-syncs the cluster — this is the actual "GitOps" loop.
+---
 
-## Step 6 — (Optional but resume-strong) Provision real infrastructure with Terraform
+## Infrastructure as Code (Terraform)
 
+The terraform/ directory contains automation scripts to provision cloud infrastructure:
+* **DigitalOcean (terraform/main.tf)**: Deploys a single Ubuntu VM droplet for simple web service environments.
+* **AWS EKS (terraform/aws_eks.tf)**: Provisions a full cloud-native network including a VPC, public subnets, internet gateways, IAM roles, and an AWS EKS (Elastic Kubernetes Service) cluster with managed node groups.
+
+To run Terraform configurations:
 ```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# edit terraform.tfvars with your real DigitalOcean API token
+cd terraform/
 terraform init
 terraform plan
-terraform apply
 ```
-
-This spins up a real cloud server you could install Kubernetes on (e.g. with
-`k3s` for a lightweight single-node cluster) instead of using local Minikube.
-
-## Step 7 — Monitoring dashboards
-
-Prometheus is already scraping `/metrics` from the FastAPI app (via
-`prometheus-fastapi-instrumentator`). In Grafana:
-1. Add Prometheus as a data source (URL: `http://prometheus:9090` if using
-   docker-compose, or the in-cluster service DNS name if on Kubernetes)
-2. Import a FastAPI dashboard template or build a simple panel showing
-   request count, latency, and error rate.
-
-## What to say about this in an interview
-
-Be ready to explain, in your own words:
-- Why liveness vs. readiness probes are different (liveness = "is it stuck, restart it"; readiness = "is it ready to receive traffic")
-- What GitOps means and why declarative + Git-as-source-of-truth is different from a script that runs `kubectl apply` directly
-- What `selfHeal: true` in the ArgoCD Application does (reverts manual cluster changes back to match Git)
-- What happens end to end when you `git push` to `main`
-- Why you separated staging and production values files (safer testing before prod, different resource sizing)
-
-## Honest scope note
-
-This project is intentionally sized for learning and demonstrating real
-concepts, not a production-grade multi-region platform. That's a fine and
-expected scope for an internship-level project — the important thing is that
-every piece here is real and something you can explain, not just described.
