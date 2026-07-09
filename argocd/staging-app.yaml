@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/YOUR_USERNAME/cloudpulse.git
+    repoURL: https://github.com/0jasbansal/cloudpulse.git
     targetRevision: develop
     path: helm-chart/cloudpulse
     helm:

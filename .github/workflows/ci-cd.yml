@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
 
 env:
-  IMAGE_NAME: YOUR_DOCKERHUB_USERNAME/cloudpulse-api
+  IMAGE_NAME: ojasbansal/cloudpulse-api
 
 jobs:
   test:
